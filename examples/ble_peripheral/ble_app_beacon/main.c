@@ -62,6 +62,9 @@
 #include "nrf_log_ctrl.h"
 #include "nrf_log_default_backends.h"
 
+#include "nvram.h"
+#include "ibeaconinf.h"
+
 
 #define APP_BLE_CONN_CFG_TAG            1                                  /**< A tag identifying the SoftDevice BLE configuration. */
 
@@ -89,6 +92,8 @@
 static ble_gap_adv_params_t m_adv_params;                                  /**< Parameters to be passed to the stack when starting advertising. */
 static uint8_t              m_adv_handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET; /**< Advertising handle used to identify an advertising set. */
 static uint8_t              m_enc_advdata[BLE_GAP_ADV_SET_DATA_SIZE_MAX];  /**< Buffer for storing an encoded advertising set. */
+
+ibeaconinf_t sys_inf;
 
 /**@brief Struct that contains pointers to the encoded advertising data. */
 static ble_gap_adv_data_t m_adv_data =
@@ -254,6 +259,14 @@ static void idle_state_handle(void)
 int main(void)
 {
     timers_init();
+    
+    nvram_init();
+
+    nvram_block_read(&sys_inf, sizeof(sys_inf));
+    if(sys_inf.atFlag == AT_FLAG_DEFAULT)
+    {
+        ;
+    }
 
     power_management_init();
     

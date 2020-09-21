@@ -10623,6 +10623,10 @@
 #define POWER_CONFIG_SOC_OBSERVER_PRIO 0
 #endif
 
+#ifndef NRFX_NVMC_ENABLED
+#define NRFX_NVMC_ENABLED 1
+#endif
+
 // </h> 
 //==========================================================
 
