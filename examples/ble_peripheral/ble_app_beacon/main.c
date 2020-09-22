@@ -71,6 +71,10 @@
 #include "crc.h"
 #include "ibeaconinf.h"
 
+#if NRFX_CHECK(NRFX_WDT_ENABLED)
+#include <nrfx_wdt.h>
+#endif
+
 
 #define APP_BLE_CONN_CFG_TAG            1                                  /**< A tag identifying the SoftDevice BLE configuration. */
 
@@ -605,6 +609,11 @@ COMPLETE_PACKET:
         r_data_ptr   = ++r_heard;
 }
 
+#if NRFX_CHECK(NRFX_WDT_ENABLED)
+nrfx_wdt_config_t wdt_config = NRFX_WDT_DEAFULT_CONFIG;
+nrfx_wdt_channel_id wdt_channel_id;
+#endif  
+
 /**
  * @brief Function for application main entry.
  */
@@ -624,6 +633,12 @@ int main(void)
         power_management_init();
     }
     
+#if NRFX_CHECK(NRFX_WDT_ENABLED)
+    nrfx_wdt_init(&wdt_config, NULL);
+    nrfx_wdt_channel_alloc(&wdt_channel_id);
+    nrfx_wdt_enable();
+#endif    
+    
     ble_stack_init();
     
     advertising_init();
@@ -640,6 +655,10 @@ int main(void)
         {
            idle_state_handle();
         }
+        
+#if NRFX_CHECK(NRFX_WDT_ENABLED)
+        nrfx_wdt_feed();
+#endif        
     }
 }
 
