@@ -3872,7 +3872,7 @@
 // <268435456=> 1000000 baud 
 
 #ifndef NRFX_UART_DEFAULT_CONFIG_BAUDRATE
-#define NRFX_UART_DEFAULT_CONFIG_BAUDRATE 30924800
+#define NRFX_UART_DEFAULT_CONFIG_BAUDRATE 2576384
 #endif
 
 // <o> NRFX_UART_DEFAULT_CONFIG_IRQ_PRIORITY  - Interrupt priority
@@ -5471,7 +5471,7 @@
  
 
 #ifndef APP_USBD_AUDIO_ENABLED
-#define APP_USBD_AUDIO_ENABLED 0
+#define APP_USBD_AUDIO_ENABLED 1
 #endif
 
 // <e> APP_USBD_ENABLED - app_usbd - USB Device library
@@ -10626,6 +10626,29 @@
 #ifndef NRFX_NVMC_ENABLED
 #define NRFX_NVMC_ENABLED 1
 #endif
+
+// </h> 
+//==========================================================
+
+// </e>
+
+// <e> APP_UART_ENABLED - app_uart - UART driver
+//==========================================================
+#ifndef APP_UART_ENABLED
+#define APP_UART_ENABLED 1
+#endif
+// <o> APP_UART_DRIVER_INSTANCE  - UART instance used
+ 
+// <0=> 0 
+
+#ifndef APP_UART_DRIVER_INSTANCE
+#define APP_UART_DRIVER_INSTANCE 0
+#endif
+
+#ifndef APP_FIFO_ENABLED
+#define APP_FIFO_ENABLED 1
+#endif
+// </e>
 
 // </h> 
 //==========================================================

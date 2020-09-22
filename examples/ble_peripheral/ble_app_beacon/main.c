@@ -51,12 +51,15 @@
 #include <stdint.h>
 #include "nordic_common.h"
 #include "bsp.h"
+#include "nrf.h"
+#include "nrf_uart.h"
 #include "nrf_soc.h"
 #include "nrf_sdh.h"
 #include "nrf_sdh_ble.h"
 #include "ble_advdata.h"
 #include "app_timer.h"
 #include "nrf_pwr_mgmt.h"
+#include "app_uart.h"
 
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
@@ -69,6 +72,11 @@
 #define APP_BLE_CONN_CFG_TAG            1                                  /**< A tag identifying the SoftDevice BLE configuration. */
 
 #define NON_CONNECTABLE_ADV_INTERVAL    MSEC_TO_UNITS(100, UNIT_0_625_MS)  /**< The advertising interval for non-connectable advertisement (100 ms). This value can vary between 100ms to 10.24s). */
+
+#define UART_TX_BUF_SIZE                256                                         /**< UART TX buffer size. */
+#define UART_RX_BUF_SIZE                256 
+
+#define DATA_BUF_LEN                    200
 
 #define APP_BEACON_INFO_LENGTH          0x17                               /**< Total length of information advertised by the Beacon. */
 #define APP_ADV_DATA_LENGTH             0x15                               /**< Length of manufacturer specific data in the advertisement. */
@@ -94,6 +102,8 @@ static uint8_t              m_adv_handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET; /**< 
 static uint8_t              m_enc_advdata[BLE_GAP_ADV_SET_DATA_SIZE_MAX];  /**< Buffer for storing an encoded advertising set. */
 
 ibeaconinf_t sys_inf;
+
+static uint8_t data_array[DATA_BUF_LEN];
 
 /**@brief Struct that contains pointers to the encoded advertising data. */
 static ble_gap_adv_data_t m_adv_data =
@@ -139,6 +149,83 @@ static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< I
 void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
 {
     app_error_handler(DEAD_BEEF, line_num, p_file_name);
+}
+
+volatile uint8_t w_data_ptr = 0;
+volatile uint8_t r_data_ptr = 0;
+volatile uint8_t overflow   = 0;
+/**@brief   Function for handling app_uart events.
+ *
+ * @details This function will receive a single character from the app_uart module and append it to
+ *          a string. 
+ */
+/**@snippet [Handling the data received over UART] */
+void uart_event_handle(app_uart_evt_t * p_event)
+{
+    switch (p_event->evt_type)
+    {
+        case APP_UART_DATA_READY: 
+            if(overflow < DATA_BUF_LEN)
+            {
+                UNUSED_VARIABLE(app_uart_get(&data_array[w_data_ptr++]));
+                w_data_ptr = w_data_ptr%DATA_BUF_LEN;
+                overflow ++;    
+            }          
+            break;
+
+        case APP_UART_COMMUNICATION_ERROR:
+            APP_ERROR_HANDLER(p_event->data.error_communication);
+            break;
+
+        case APP_UART_FIFO_ERROR:
+            APP_ERROR_HANDLER(p_event->data.error_code);
+            break;
+
+        default:
+            break;
+    }
+}
+/**@snippet [Handling the data received over UART] */
+
+/**@brief  Function for initializing the UART module.
+ */
+/**@snippet [UART Initialization] */
+static void uart_init(void)
+{
+    uint32_t                     err_code;
+    app_uart_comm_params_t const comm_params =
+    {
+        .rx_pin_no    = RX_PIN_NUMBER,
+        .tx_pin_no    = TX_PIN_NUMBER,
+        .rts_pin_no   = RTS_PIN_NUMBER,
+        .cts_pin_no   = CTS_PIN_NUMBER,
+        .flow_control = APP_UART_FLOW_CONTROL_DISABLED,
+        .use_parity   = false,
+#if defined (UART_PRESENT)
+        .baud_rate    = NRF_UART_BAUDRATE_9600
+#else
+        .baud_rate    = NRF_UARTE_BAUDRATE_115200
+#endif
+    };
+
+    APP_UART_FIFO_INIT(&comm_params,
+                       UART_RX_BUF_SIZE,
+                       UART_TX_BUF_SIZE,
+                       uart_event_handle,
+                       APP_IRQ_PRIORITY_LOWEST,
+                       err_code);
+    APP_ERROR_CHECK(err_code);
+}
+/**@snippet [UART Initialization] */
+
+void uart_data_tx(uint8_t *buf, uint8_t len)
+{
+    if((buf == NULL) || (len == 0))
+        return;
+    
+    do{
+        app_uart_put(*buf++);     
+    }while(--len);
 }
 
 /**@brief Function for initializing the Advertising functionality.
@@ -265,10 +352,12 @@ int main(void)
     nvram_block_read(&sys_inf, sizeof(sys_inf));
     if(sys_inf.atFlag == AT_FLAG_DEFAULT)
     {
-        ;
+        uart_init();
     }
-
-    power_management_init();
+    else
+    {        
+        power_management_init();
+    }
     
     ble_stack_init();
     
