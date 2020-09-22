@@ -75,6 +75,9 @@
 #include <nrfx_wdt.h>
 #endif
 
+#if NRFX_CHECK(NRFX_SAADC_ENABLED)
+#include "vbat.h"
+#endif
 
 #define APP_BLE_CONN_CFG_TAG            1                                  /**< A tag identifying the SoftDevice BLE configuration. */
 
@@ -113,6 +116,10 @@
 #if defined(USE_UICR_FOR_MAJ_MIN_VALUES)
 #define MAJ_VAL_OFFSET_IN_BEACON_INFO   18                                 /**< Position of the MSB of the Major Value in m_beacon_info array. */
 #define UICR_ADDRESS                    0x10001080                         /**< Address of the UICR register used by this example. The major and minor versions to be encoded into the advertising data will be picked up from this location. */
+#endif
+
+#if NRFX_CHECK(NRFX_SAADC_ENABLED)
+static uint8_t   vbat_grad;
 #endif
 
 _APP_TIMER_DEF(sys_restart_timeout_id);
@@ -646,7 +653,14 @@ int main(void)
     nrfx_wdt_init(&wdt_config, NULL);
     nrfx_wdt_channel_alloc(&wdt_channel_id);
     nrfx_wdt_enable();
-#endif    
+#endif 
+    
+#if NRFX_CHECK(NRFX_SAADC_ENABLED)
+    nrf_delay_ms(2);
+    vbat_init();
+    nrf_delay_ms(2);
+    vbat_grad = vbat_read_value();    
+#endif 
     
     ble_stack_init();
     
