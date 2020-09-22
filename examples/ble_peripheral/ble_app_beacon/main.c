@@ -49,6 +49,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <nrfx_nvmc.h>
 #include "nordic_common.h"
 #include "bsp.h"
 #include "nrf.h"
@@ -56,6 +57,7 @@
 #include "nrf_soc.h"
 #include "nrf_sdh.h"
 #include "nrf_sdh_ble.h"
+#include "nrf_delay.h"
 #include "ble_advdata.h"
 #include "app_timer.h"
 #include "nrf_pwr_mgmt.h"
@@ -66,6 +68,7 @@
 #include "nrf_log_default_backends.h"
 
 #include "nvram.h"
+#include "crc.h"
 #include "ibeaconinf.h"
 
 
@@ -77,6 +80,15 @@
 #define UART_RX_BUF_SIZE                256 
 
 #define DATA_BUF_LEN                    200
+#define DEFAULT_UART_AT_TEST_LEN        4
+#define DEFAULT_UART_AT_RSP_LEN         6
+#define DEFAULT_UART_AT_CMD_LEN         49
+
+#define APP_ADV_INTERVAL                480                                         /**< The advertising interval (in units of 0.625 ms. This value corresponds to 300 ms). */
+
+#define APP_ADV_DURATION                0                                           /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
+
+#define APP_ADV_TXPOWER                 0
 
 #define APP_BEACON_INFO_LENGTH          0x17                               /**< Total length of information advertised by the Beacon. */
 #define APP_ADV_DATA_LENGTH             0x15                               /**< Length of manufacturer specific data in the advertisement. */
@@ -228,6 +240,25 @@ void uart_data_tx(uint8_t *buf, uint8_t len)
     }while(--len);
 }
 
+const tx_pow_t  tx_power_table[]=
+{
+    {-30,0xA0}, {-20,0xAB},  {-16,0xB0},
+    {-12,0xB1}, {-8,0xB2},   {-4,0xBD},
+    {0,0xB5},   {3,0XC5},    {4,0XD0},
+};
+
+const tx_interval_t tx_interval_table[]=
+{
+    {1,1400},   //875ms
+    {2,800},    //500ms
+    {3,480},    //300ms
+    {4,400},    //250ms
+    {5,320},    //200ms
+    {10,160},   //100ms
+    {20,80},    //50ms
+    {30,48},    //30ms
+    {50,32}     //20ms
+};
 /**@brief Function for initializing the Advertising functionality.
  *
  * @details Encodes the required advertising data and passes it to the stack.
@@ -339,6 +370,195 @@ static void idle_state_handle(void)
     }
 }
 
+//Consistent with setting dev_information
+const uint8_t D_FRT[10] ={'2','0','2','0','-','0','9','-','3','0'};                
+const uint8_t D_FR[14]={'F','M','V','E','R','S','I','O','N','_','0','0','0','4'}; 
+
+const  uint8_t D_CKey[16]={0xDE,0x48,0x2B,0x1C,0x22,0x1C,0x6C,0x30,0x3C,0xF0,0x50,0xEB,0x00,0x20,0xB0,0xBD}; 
+static uint8_t  data_res[DEFAULT_UART_AT_CMD_LEN];
+void uart_at_handle(uint8_t *buf)
+{
+    uint8_t     mac_res[6];
+    
+    //uuid
+    memcpy(&sys_inf.uuidValue, &data_res[5], DEFAULT_UUID_LEN);
+    //major & minor
+    memcpy(&sys_inf.majorValue, &data_res[21], sizeof(uint32_t));
+    //hwvr
+    memcpy(&sys_inf.hwvr, &data_res[35], sizeof(uint32_t));
+    //txPower
+    memcpy(&sys_inf.txPower, &data_res[39], sizeof(uint8_t));
+    if(sys_inf.txPower >= sizeof(tx_power_table)/sizeof(tx_pow_t))
+    {
+        sys_inf.txPower = APP_ADV_TXPOWER;
+        sys_inf.Rxp     = tx_power_table[APP_ADV_TXPOWER].rxp;
+    }
+    else
+    {
+        sys_inf.Rxp     = tx_power_table[sys_inf.txPower].rxp;
+    }           
+    //txInterval
+    memcpy(&sys_inf.txInterval, &data_res[40], sizeof(uint8_t));
+    //mdate
+    memcpy(&sys_inf.mDate, &data_res[25], sizeof(sys_inf.mDate));
+    
+    /***** Just to get through production. ***********/
+    memcpy(mac_res, &data_res[41], sizeof(mac_res));
+    memset(data_res, 0, sizeof(data_res));
+    memcpy(data_res, mac_res, sizeof(mac_res));
+    
+    data_res[6] = sys_inf.txPower;
+    data_res[7] = sys_inf.txInterval;
+    
+    memcpy(&data_res[8], sys_inf.majorValue, sizeof(uint32_t));
+    memcpy(&data_res[12], sys_inf.uuidValue, DEFAULT_UUID_LEN);
+    memcpy(&data_res[28], sys_inf.mDate, sizeof(sys_inf.mDate));
+    
+    data_res[38] = sys_inf.Rxp;
+    
+    memcpy(&data_res[39], &sys_inf.hwvr[0], sizeof(sys_inf.hwvr)); 
+    
+    if(nrfx_nvmc_page_erase(BL_BACKUP_ADD) != NRFX_SUCCESS)
+        return;
+    
+    nrfx_nvmc_bytes_write(BL_BACKUP_ADD, data_res, 43);
+    
+    uart_data_tx((uint8_t *)"OK+1\r\n", 6);
+}
+
+void uart_at_resp(void)
+{
+    uint8_t const *dst;
+    uint8_t crc_8;
+    
+    memset(data_res, 0, sizeof(data_res));
+    
+    dst = (const uint8_t *)BL_BACKUP_ADD;
+    
+    memcpy(data_res, dst, 43);
+    
+    uart_data_tx(((uint8_t *)"OK+"), 3);
+    uart_data_tx(data_res, 43);
+    uart_data_tx((uint8_t *)D_FRT,      sizeof(D_FRT));
+    uart_data_tx((uint8_t *)&D_FR[10],  sizeof(uint32_t));
+    uart_data_tx((uint8_t *)D_CKey,     sizeof(D_CKey));
+    
+    nrf_delay_ms(100); //wait for uart
+    
+    sys_inf.atFlag = AT_FLAG_DONE;
+    memset(data_res, 0, sizeof(data_res));
+    memcpy(data_res, &sys_inf.txPower, sizeof(sys_inf));
+    crc_8 = crc8(0, &sys_inf.txPower, sizeof(sys_inf));
+    data_res[sizeof(sys_inf)] = crc_8;
+                            
+    nvram_block_write(data_res, sizeof(sys_inf)+sizeof(uint8_t)); 
+
+    NVIC_SystemReset();           
+}
+
+void uart_data_handle(void)
+{
+    uint8_t     r_heard;
+    uint8_t     rx_cnt;
+    uint8_t     data_len;
+    uint8_t     *ptr;
+    uint8_t     res;
+    
+    r_heard = r_data_ptr;
+    
+    ptr = data_array;
+    
+    rx_cnt  = overflow;
+    
+    if(rx_cnt < DEFAULT_UART_AT_TEST_LEN)
+        return;
+     
+    if(*(ptr + r_heard) != 'A')
+         goto  INVALID_PACKET;
+    
+    r_heard ++;
+    r_heard = r_heard%DATA_BUF_LEN;
+    
+    if(*(ptr + r_heard) != 'T')
+        goto  INVALID_PACKET;
+    
+    r_heard ++;
+    r_heard = r_heard%DATA_BUF_LEN;    
+    
+    if(*(ptr + r_heard) == '\r')
+    {
+        r_heard ++;
+        r_heard = r_heard%DATA_BUF_LEN;
+        
+        if(*(ptr + r_heard) == '\n')
+        {
+            uart_data_tx((uint8_t *)"OK\r\n", sizeof(uint32_t));
+            
+            data_len = DEFAULT_UART_AT_TEST_LEN;
+            
+            goto COMPLETE_PACKET;
+        }
+    }
+    else if(*(ptr + r_heard) == '+')
+    {
+        r_heard ++;
+        r_heard = r_heard%DATA_BUF_LEN;
+        
+        if(*(ptr + r_heard) == '1')
+        {
+            r_heard ++;
+            r_heard = r_heard%DATA_BUF_LEN;
+
+            if(*(ptr + r_heard) == '=')
+            {
+                if(rx_cnt >= DEFAULT_UART_AT_CMD_LEN)
+                {
+                    rx_cnt = DEFAULT_UART_AT_CMD_LEN;
+                    
+                    memset(data_res, 0, sizeof(data_res));
+                    
+                    if(r_data_ptr + rx_cnt <= DATA_BUF_LEN)
+                    {       
+                        r_heard += (rx_cnt - sizeof("AT+1=") +1);
+                        memcpy(data_res, ptr + r_data_ptr, rx_cnt);
+                    }
+                    else
+                    {
+                        res = DATA_BUF_LEN - r_data_ptr;
+                        r_heard = rx_cnt - res;
+                        memcpy(data_res, ptr + r_data_ptr, res);
+                        memcpy(data_res + res, ptr, r_heard);                        
+                    }
+                    
+                    uart_at_handle(data_res);
+                    
+                    data_len = DEFAULT_UART_AT_CMD_LEN;
+                    
+                    goto COMPLETE_PACKET;  
+                }
+                else
+                    return;
+            }
+            else
+               return;
+        }
+        else if(*(ptr+r_heard) == '?')
+        {       
+            uart_at_resp();           
+        }   
+    }
+    else
+        goto INVALID_PACKET;
+                  
+      
+INVALID_PACKET:
+        r_data_ptr ++;
+        r_data_ptr = r_data_ptr%DATA_BUF_LEN;
+        overflow --;  
+COMPLETE_PACKET:  
+        overflow    -= data_len;
+        r_data_ptr   = ++r_heard;
+}
 
 /**
  * @brief Function for application main entry.
@@ -367,7 +587,14 @@ int main(void)
 
     for (;; )
     {
-        idle_state_handle();
+        if(sys_inf.atFlag == AT_FLAG_DEFAULT)
+        {
+            uart_data_handle();
+        }
+        else
+        {
+           idle_state_handle();
+        }
     }
 }
 
