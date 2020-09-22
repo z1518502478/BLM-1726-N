@@ -80,6 +80,8 @@
 
 #define NON_CONNECTABLE_ADV_INTERVAL    MSEC_TO_UNITS(100, UNIT_0_625_MS)  /**< The advertising interval for non-connectable advertisement (100 ms). This value can vary between 100ms to 10.24s). */
 
+#define SYS_RESTART_TIMEOUT             APP_TIMER_TICKS(600000) //10min
+
 #define UART_TX_BUF_SIZE                256                                         /**< UART TX buffer size. */
 #define UART_RX_BUF_SIZE                256 
 
@@ -112,6 +114,8 @@
 #define MAJ_VAL_OFFSET_IN_BEACON_INFO   18                                 /**< Position of the MSB of the Major Value in m_beacon_info array. */
 #define UICR_ADDRESS                    0x10001080                         /**< Address of the UICR register used by this example. The major and minor versions to be encoded into the advertising data will be picked up from this location. */
 #endif
+
+_APP_TIMER_DEF(sys_restart_timeout_id);
 
 static ble_gap_adv_params_t m_adv_params;                                  /**< Parameters to be passed to the stack when starting advertising. */
 static uint8_t              m_adv_handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET; /**< Advertising handle used to identify an advertising set. */
@@ -609,6 +613,11 @@ COMPLETE_PACKET:
         r_data_ptr   = ++r_heard;
 }
 
+void sys_restart_timeout_handle(void * p_context)
+{
+    NVIC_SystemReset();   
+}
+
 #if NRFX_CHECK(NRFX_WDT_ENABLED)
 nrfx_wdt_config_t wdt_config = NRFX_WDT_DEAFULT_CONFIG;
 nrfx_wdt_channel_id wdt_channel_id;
@@ -644,6 +653,10 @@ int main(void)
     advertising_init();
 
     advertising_start();
+    
+    app_timer_create(&sys_restart_timeout_id, APP_TIMER_MODE_SINGLE_SHOT, sys_restart_timeout_handle);
+
+    app_timer_start(sys_restart_timeout_id, SYS_RESTART_TIMEOUT, NULL);
 
     for (;; )
     {
