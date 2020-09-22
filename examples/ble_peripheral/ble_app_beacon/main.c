@@ -267,12 +267,33 @@ const tx_interval_t tx_interval_table[]=
 static void advertising_init(void)
 {
     uint32_t      err_code;
-
+    
+    ble_gap_addr_t     addr;
+    
+    uint32_t      adv_interval;    
+    int8_t        tx_power_level;
+    
+    uint8_t       i;
+    
     ble_advdata_t advdata;
     
     uint8_t       flags = BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED;    
     
     ble_advdata_manuf_data_t manuf_specific_data;
+    
+    if(sys_inf.txPower >= sizeof(tx_power_table)/sizeof(tx_pow_t))
+    {
+        tx_power_level = tx_power_table[APP_ADV_TXPOWER].power;
+        m_beacon_info[22] = tx_power_table[APP_ADV_TXPOWER].rxp;
+    }
+    else
+    {
+        tx_power_level = tx_power_table[sys_inf.txPower].power;
+        m_beacon_info[22] = tx_power_table[sys_inf.txPower].rxp;
+    }    
+    
+    memcpy(&m_beacon_info[2], sys_inf.uuidValue, DEFAULT_UUID_LEN);
+    memcpy(&m_beacon_info[18], sys_inf.majorValue, sizeof(uint32_t));
 
     manuf_specific_data.company_identifier = APP_COMPANY_IDENTIFIER;
 
@@ -288,11 +309,22 @@ static void advertising_init(void)
 
     // Initialize advertising parameters (used when starting advertising).
     memset(&m_adv_params, 0, sizeof(m_adv_params));
+    
+    for(i=0; i<(sizeof(tx_interval_table)/sizeof(tx_interval_t)); i++)
+    {
+        if(sys_inf.txInterval == tx_interval_table[i].tx_index)
+        {
+                adv_interval = tx_interval_table[i].interval;
+                break;
+        }
+    }
+    if(i == sizeof(tx_interval_table)/sizeof(tx_interval_t))
+        adv_interval = APP_ADV_INTERVAL;
 
     m_adv_params.properties.type = BLE_GAP_ADV_TYPE_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED;
     m_adv_params.p_peer_addr     = NULL;    // Undirected advertisement.
     m_adv_params.filter_policy   = BLE_GAP_ADV_FP_ANY;
-    m_adv_params.interval        = NON_CONNECTABLE_ADV_INTERVAL;
+    m_adv_params.interval        = adv_interval;
     m_adv_params.duration        = 0;       // Never time out.
 
     err_code = ble_advdata_encode(&advdata, m_adv_data.adv_data.p_data, &m_adv_data.adv_data.len);
@@ -300,6 +332,16 @@ static void advertising_init(void)
 
     err_code = sd_ble_gap_adv_set_configure(&m_adv_handle, &m_adv_data, &m_adv_params);
     APP_ERROR_CHECK(err_code);
+    
+    err_code = sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_ADV, m_adv_handle, tx_power_level); 
+    APP_ERROR_CHECK(err_code);
+    
+    sd_ble_gap_addr_get(&addr);
+    if(addr.addr_type != BLE_GAP_ADDR_TYPE_PUBLIC)
+    {
+        addr.addr_type = BLE_GAP_ADDR_TYPE_PUBLIC;
+        sd_ble_gap_addr_set(&addr);
+    }
 }
 
 
@@ -399,6 +441,9 @@ void uart_at_handle(uint8_t *buf)
     }           
     //txInterval
     memcpy(&sys_inf.txInterval, &data_res[40], sizeof(uint8_t));
+    if(sys_inf.txInterval > tx_interval_table[5].tx_index)
+       sys_inf.txInterval =  tx_interval_table[5].tx_index;
+    
     //mdate
     memcpy(&sys_inf.mDate, &data_res[25], sizeof(sys_inf.mDate));
     
