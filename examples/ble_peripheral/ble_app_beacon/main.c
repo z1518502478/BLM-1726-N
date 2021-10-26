@@ -257,9 +257,9 @@ void uart_data_tx(uint8_t *buf, uint8_t len)
 
 const tx_pow_t  tx_power_table[]=
 {
-    {-30,0xA0}, {-20,0xAB},  {-16,0xB0},
+    {-40,0xA0}, {-20,0xAB},  {-16,0xB0},
     {-12,0xB1}, {-8,0xB2},   {-4,0xBD},
-    {0,0xB5},   {3,0XC5},    {4,0XD0},
+    {0,0xB5},   {4,0XD0},
 };
 
 const tx_interval_t tx_interval_table[]=
