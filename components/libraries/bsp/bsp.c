@@ -161,9 +161,14 @@ static void bsp_button_event_handler(uint8_t pin_no, uint8_t button_action)
                 {
                     event = m_events_list[button].release_event;
                 }
-                break;
+                if (release_event_at_push[button] == m_events_list[button].long_push_event)
+                {
+                    event = m_events_list[button].release_event;
+                }
+                    break;
             case BSP_BUTTON_ACTION_LONG_PUSH:
                 event = m_events_list[button].long_push_event;
+                release_event_at_push[button] = m_events_list[button].long_push_event;
         }
     }
 
@@ -496,7 +501,7 @@ uint32_t bsp_init(uint32_t type, bsp_event_callback_t callback)
 
         for (num = 0; ((num < BUTTONS_NUMBER) && (err_code == NRF_SUCCESS)); num++)
         {
-            err_code = bsp_event_to_button_action_assign(num, BSP_BUTTON_ACTION_PUSH, BSP_EVENT_DEFAULT);
+            err_code = bsp_event_to_button_action_assign(num, BSP_BUTTON_ACTION_LONG_PUSH, BSP_EVENT_DEFAULT);
         }
 
         if (err_code == NRF_SUCCESS)
@@ -526,7 +531,7 @@ uint32_t bsp_init(uint32_t type, bsp_event_callback_t callback)
     if (type & BSP_INIT_LEDS)
     {
       //handle LEDs only. Buttons are already handled.
-      bsp_board_init(BSP_INIT_LEDS);
+      //bsp_board_init(BSP_INIT_LEDS);
 
       // timers module must be already initialized!
       if (err_code == NRF_SUCCESS)
@@ -560,7 +565,7 @@ uint32_t bsp_event_to_button_action_assign(uint32_t button, bsp_button_action_t 
         if (event == BSP_EVENT_DEFAULT)
         {
             // Setting default action: BSP_EVENT_KEY_x for PUSH actions, BSP_EVENT_NOTHING for RELEASE and LONG_PUSH actions.
-            event = (action == BSP_BUTTON_ACTION_PUSH) ? (bsp_event_t)(BSP_EVENT_KEY_0 + button) : BSP_EVENT_NOTHING;
+            event = (action == BSP_BUTTON_ACTION_LONG_PUSH) ? (bsp_event_t)(BSP_EVENT_KEY_0 + button) : BSP_EVENT_NOTHING;
         }
         switch (action)
         {

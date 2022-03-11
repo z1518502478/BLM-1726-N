@@ -62,6 +62,9 @@
 #include "app_timer.h"
 #include "nrf_pwr_mgmt.h"
 #include "app_uart.h"
+#include "bsp.h"
+#include "bsp_btn_ble.h"
+#include "nrf_gpio.h"
 
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
@@ -84,6 +87,7 @@
 #define NON_CONNECTABLE_ADV_INTERVAL    MSEC_TO_UNITS(100, UNIT_0_625_MS)  /**< The advertising interval for non-connectable advertisement (100 ms). This value can vary between 100ms to 10.24s). */
 
 #define SYS_RESTART_TIMEOUT             APP_TIMER_TICKS(600000) //10min
+#define ADV_UPDATE_TIME                 APP_TIMER_TICKS(30000)  //30s
 
 #define UART_TX_BUF_SIZE                256                                         /**< UART TX buffer size. */
 #define UART_RX_BUF_SIZE                256 
@@ -123,6 +127,7 @@ static uint8_t   vbat_grad;
 #endif
 
 _APP_TIMER_DEF(sys_restart_timeout_id);
+_APP_TIMER_DEF(updata_timer_id);
 
 static ble_gap_adv_params_t m_adv_params;                                  /**< Parameters to be passed to the stack when starting advertising. */
 static uint8_t              m_adv_handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET; /**< Advertising handle used to identify an advertising set. */
@@ -161,7 +166,7 @@ static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< I
                          // this implementation.
 };
 
-
+void adv_update_timeout_handler(void *p_context);
 /**@brief Callback function for asserts in the SoftDevice.
  *
  * @details This function will be called in case of an assert in the SoftDevice.
@@ -295,7 +300,7 @@ static void advertising_init(void)
     uint8_t       flags = BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED;    
     
     ble_advdata_manuf_data_t manuf_specific_data;
-    
+
     if(sys_inf.txPower >= sizeof(tx_power_table)/sizeof(tx_pow_t))
     {
         tx_power_level = tx_power_table[APP_ADV_TXPOWER].power;
@@ -396,11 +401,19 @@ static void ble_stack_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
+void Start_adv_updata_Timer(void)
+{
+    ret_code_t err_code = app_timer_start(updata_timer_id, ADV_UPDATE_TIME, NULL);                           
+    APP_ERROR_CHECK(err_code);
+}
 
 /**@brief Function for initializing timers. */
 static void timers_init(void)
 {
     ret_code_t err_code = app_timer_init();
+    APP_ERROR_CHECK(err_code);
+
+    err_code = app_timer_create(&updata_timer_id, APP_TIMER_MODE_SINGLE_SHOT, adv_update_timeout_handler);
     APP_ERROR_CHECK(err_code);
 }
 
@@ -625,6 +638,60 @@ void sys_restart_timeout_handle(void * p_context)
     NVIC_SystemReset();   
 }
 
+void adv_update_timeout_handler(void * p_context)
+{
+    UNUSED_PARAMETER(p_context);
+
+    ret_code_t err_code = sd_ble_gap_adv_stop(m_adv_handle);
+    APP_ERROR_CHECK(err_code);
+
+    sys_inf.uuidValue[0] &= 0x07;
+
+    advertising_init();
+    advertising_start();
+}
+
+void adv_data_update(void)
+{
+    ret_code_t err_code = sd_ble_gap_adv_stop(m_adv_handle);
+    APP_ERROR_CHECK(err_code);
+
+    sys_inf.uuidValue[0] |= 0x08;
+
+    advertising_init();
+    APP_ERROR_CHECK(err_code);
+    advertising_start();
+    
+    Start_adv_updata_Timer();
+}
+
+void bsp_event_handler(bsp_event_t event)
+{
+    switch(event)
+    {
+        case BSP_EVENT_KEY_1:
+            adv_data_update();
+            break;
+
+        default:
+            break;
+    }
+}
+
+static void buttons_init(bool *p_erase_bonds)
+{
+
+    bsp_event_t startup_event;
+
+    uint32_t err_code = bsp_init(BSP_INIT_BUTTONS, bsp_event_handler);
+    APP_ERROR_CHECK(err_code);
+
+    err_code = bsp_event_to_button_action_assign(2, BSP_BUTTON_ACTION_LONG_PUSH, BSP_EVENT_KEY_1);    
+    APP_ERROR_CHECK(err_code);
+
+    *p_erase_bonds = (startup_event == BSP_EVENT_CLEAR_BONDING_DATA);
+}
+
 #if NRFX_CHECK(NRFX_WDT_ENABLED)
 nrfx_wdt_config_t wdt_config = NRFX_WDT_DEAFULT_CONFIG;
 nrfx_wdt_channel_id wdt_channel_id;
@@ -635,11 +702,16 @@ nrfx_wdt_channel_id wdt_channel_id;
  */
 int main(void)
 {
+    bool erase_bonds;
     timers_init();
-    
     nvram_init();
+    buttons_init(&erase_bonds);
 
     nvram_block_read(&sys_inf, sizeof(sys_inf));
+	
+#if NRFX_CHECK(DEMO)
+	power_management_init();
+#else
     if(sys_inf.atFlag == AT_FLAG_DEFAULT)
     {
         uart_init();
@@ -648,6 +720,7 @@ int main(void)
     {        
         power_management_init();
     }
+#endif
     
 #if NRFX_CHECK(NRFX_WDT_ENABLED)
     nrfx_wdt_init(&wdt_config, NULL);
@@ -674,21 +747,24 @@ int main(void)
 
     for (;; )
     {
-        if(sys_inf.atFlag == AT_FLAG_DEFAULT)
-        {
-            uart_data_handle();
-        }
-        else
-        {
-           idle_state_handle();
-        }
-        
+#if NRFX_CHECK(DEMO)
+    idle_state_handle();
+#else
+    if (sys_inf.atFlag == AT_FLAG_DEFAULT)
+    {
+        uart_data_handle();
+    }
+    else
+    {
+        idle_state_handle();
+    }
+#endif
+
 #if NRFX_CHECK(NRFX_WDT_ENABLED)
-        nrfx_wdt_feed();
+    nrfx_wdt_feed();
 #endif        
     }
 }
-
 
 /**
  * @}
