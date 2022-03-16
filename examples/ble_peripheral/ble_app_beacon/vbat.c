@@ -9,11 +9,11 @@
 #include <nrfx_saadc.h>
 #include "vbat.h"
 
-#define SAADC_CHANNEL       6
+#define SAADC_CHANNEL       3
 
 nrfx_saadc_config_t saadc_config = NRFX_SAADC_DEFAULT_CONFIG;
 
-nrf_saadc_channel_config_t saadc_channel_config = NRFX_SAADC_DEFAULT_CHANNEL_CONFIG_SE(NRF_SAADC_INPUT_AIN6);
+nrf_saadc_channel_config_t saadc_channel_config = NRFX_SAADC_DEFAULT_CHANNEL_CONFIG_SE(NRF_SAADC_INPUT_AIN3);
 
 void vbat_init(void)
 {
@@ -28,26 +28,25 @@ void vbat_init(void)
 
 uint8_t vbat_read_value(void)
 {  
-    uint8_t  grad;  
-    
+    uint8_t  grad;
     float data_res = 0.00;
     
     nrfx_err_t err_code;
     
     nrf_saadc_value_t v_data;
-    
+
     err_code = nrfx_saadc_sample_convert(SAADC_CHANNEL, &v_data);
     APP_ERROR_CHECK(err_code);
-       
-    data_res = (0.03 + v_data * 6 * 0.6/4096) * 100;
+
+    data_res = ((v_data * 3.6) / 4096) * 130;
    
-    if(data_res < 320)
-       grad = 0;
-    else if(data_res >= 365)
-       grad = 10;
-    else   
-       grad = (uint8_t)((data_res - 320)/4.5);
-          
+    if(data_res < 384)
+       grad = 0x00;
+    else if(data_res >= 450)
+       grad = 0x07;
+    else
+        grad = (uint8_t)(((data_res - 384) / 10) + 1) | 0x00;
+
     return grad;
 }
 
