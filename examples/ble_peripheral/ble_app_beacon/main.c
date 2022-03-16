@@ -730,9 +730,9 @@ int main(void)
 #endif 
     
 #if NRFX_CHECK(NRFX_SAADC_ENABLED)
-    nrf_delay_ms(2);
+    nrf_delay_ms(10);
     vbat_init();
-    nrf_delay_ms(2);
+    nrf_delay_ms(10);
     vbat_grad = vbat_read_value();    
 #endif 
     
