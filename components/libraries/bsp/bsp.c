@@ -73,35 +73,35 @@ static void bsp_button_event_handler(uint8_t pin_no, uint8_t button_action);
 static const app_button_cfg_t app_buttons[BUTTONS_NUMBER] =
 {
     #ifdef BSP_BUTTON_0
-    {BSP_BUTTON_0, false, BUTTON_PULL, bsp_button_event_handler},
+    {BSP_BUTTON_0, true, NRF_GPIO_PIN_PULLDOWN, bsp_button_event_handler},
     #endif // BUTTON_0
 
     #ifdef BSP_BUTTON_1
-    {BSP_BUTTON_1, false, BUTTON_PULL, bsp_button_event_handler},
+    {BSP_BUTTON_1, true, NRF_GPIO_PIN_PULLDOWN, bsp_button_event_handler},
     #endif // BUTTON_1
 
     #ifdef BSP_BUTTON_2
-    {BSP_BUTTON_2, false, BUTTON_PULL, bsp_button_event_handler},
+    {BSP_BUTTON_2, true, NRF_GPIO_PIN_PULLDOWN, bsp_button_event_handler},
     #endif // BUTTON_2
 
     #ifdef BSP_BUTTON_3
-    {BSP_BUTTON_3, false, BUTTON_PULL, bsp_button_event_handler},
+    {BSP_BUTTON_3, true, NRF_GPIO_PIN_PULLDOWN, bsp_button_event_handler},
     #endif // BUTTON_3
 
     #ifdef BSP_BUTTON_4
-    {BSP_BUTTON_4, false, BUTTON_PULL, bsp_button_event_handler},
+    {BSP_BUTTON_4, true, NRF_GPIO_PIN_PULLDOWN, bsp_button_event_handler},
     #endif // BUTTON_4
 
     #ifdef BSP_BUTTON_5
-    {BSP_BUTTON_5, false, BUTTON_PULL, bsp_button_event_handler},
+    {BSP_BUTTON_5, true, NRF_GPIO_PIN_PULLDOWN, bsp_button_event_handler},
     #endif // BUTTON_5
 
     #ifdef BSP_BUTTON_6
-    {BSP_BUTTON_6, false, BUTTON_PULL, bsp_button_event_handler},
+    {BSP_BUTTON_6, true, NRF_GPIO_PIN_PULLDOWN, bsp_button_event_handler},
     #endif // BUTTON_6
 
     #ifdef BSP_BUTTON_7
-    {BSP_BUTTON_7, false, BUTTON_PULL, bsp_button_event_handler},
+    {BSP_BUTTON_7, true, NRF_GPIO_PIN_PULLDOWN, bsp_button_event_handler},
     #endif // BUTTON_7
 
 };
