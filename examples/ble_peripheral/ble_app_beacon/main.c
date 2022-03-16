@@ -86,7 +86,7 @@
 
 #define NON_CONNECTABLE_ADV_INTERVAL    MSEC_TO_UNITS(100, UNIT_0_625_MS)  /**< The advertising interval for non-connectable advertisement (100 ms). This value can vary between 100ms to 10.24s). */
 
-#define SYS_RESTART_TIMEOUT             APP_TIMER_TICKS(600000) //10min
+#define SYS_RESTART_TIMEOUT             APP_TIMER_TICKS(600000 * 3)    //30min
 #define ADV_UPDATE_TIME                 APP_TIMER_TICKS(30000)  //30s
 
 #define UART_TX_BUF_SIZE                256                                         /**< UART TX buffer size. */
@@ -300,7 +300,8 @@ static void advertising_init(void)
     uint8_t       flags = BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED;    
     
     ble_advdata_manuf_data_t manuf_specific_data;
-
+    sys_inf.uuidValue[0] |= vbat_grad;
+    
     if(sys_inf.txPower >= sizeof(tx_power_table)/sizeof(tx_pow_t))
     {
         tx_power_level = tx_power_table[APP_ADV_TXPOWER].power;
